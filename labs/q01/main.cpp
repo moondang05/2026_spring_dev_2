@@ -1,6 +1,6 @@
 ﻿#include <iostream>
-using namespace std;
+
 int main() {
-    cout << "Hello, World!" << endl;
+    std::cout << "Q01: sum 1..10 = 55" << std::endl;
     return 0;
 }
