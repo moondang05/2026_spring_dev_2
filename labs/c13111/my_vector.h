@@ -74,17 +74,7 @@ public:
     }
 
 
-    // TODO: 이동 생성자 / 이동 대입 (noexcept, 포인터 교환)
-    // my_vector(my_vector &&other) noexcept {
-    //     data_ = other.data_;
-    //     size_ = other.size_;
-    //     capacity_ = other.capacity_;
-    //     other.data_ = nullptr;
-    //     other.size_ = 0;
-    //     other.capacity_ = 0;
-    // }
-
-    
+    // TODO: 이동 생성자 / 이동 대입 (noexcept, 포인터 교환)    
     my_vector(my_vector &&other) noexcept :
     data_(other.data_), 
     size_(other.size_), 
@@ -94,10 +84,10 @@ public:
         other.capacity_ = 0;
     }
 
-    // my_vector& operator=(my_vector other) {
-    //     swap(other);
-    //     return *this;
-    // }
+    my_vector& operator=(my_vector other) noexcept {
+        swap(other);
+        return *this;
+    }
 
 
     // TODO: size(), capacity(), empty()
@@ -107,28 +97,21 @@ public:
 
 
     // TODO: operator[] — Deducing This, 범위 검사 없음
-    template<typename Self>
-    auto& operator[](this Self& self, size_t index) {
-        return static_cast<T&>(self.data_[index]);
-    }
-
     // T& operator[](std::size_t i) noexcept { return data_[i]; }
     // const T& operator[](std::size_t i) const noexcept { return data_[i]; }
     // 기존 방식 vs C++23 Deducing This 방식 (둘 다 범위 검사 없는 operator[] 구현이 가능하다)
+    template<typename Self>
+    auto&& operator[](this Self&& self, std::size_t index) noexcept {
+        return std::forward_like<Self>(self.data_[index]);
+    }
 
 
     // TODO: at()       — Deducing This, std::out_of_range throw
     template<typename Self>
-    auto& at(this Self& self, size_t index) {
+    auto&& at(this Self&& self, std::size_t index) {
         if (index >= self.size_)
             throw std::out_of_range("Index out of bounds");
-        return static_cast<T&>(self.data_[index]);
-
-        // try {
-        //     return static_cast<T&>(self.data_[index]);
-        // } catch (...) {
-        //     return default; // 임시로 -1 반환, 실제로는 std::out_of_range 예외를 던져야 함
-        // }
+        return std::forward_like<Self>(self.data_[index]);
     }
     // T& at(std::size_t i) {
     //     if (i >= size_)
@@ -147,8 +130,7 @@ public:
     // TODO: reserve(std::size_t new_capacity)
     //         새 메모리 allocate → 원소 제자리 이동 생성 → 옛 원소 destroy_n → deallocate
     void reserve(std::size_t new_capacity) {
-        if (new_capacity <= capacity_)  
-            return;
+        resize(new_capacity);
     }
         // T* new_data = alloc_.allocate(new_capacity);
         // for (std::size_t i = 0; i < size_; ++i)
@@ -166,6 +148,10 @@ public:
 
 
     // TODO: push_back(const T&) / push_back(T&&)  — construct_at 으로 제자리 생성
+
+    void push_back(const T& value) { emplace_back(value); }
+    void push_back(T&& value) { emplace_back(std::move(value)); }
+
     // TODO: template <typename... Args>
     //           requires std::constructible_from<T, Args...>
     //       T& emplace_back(Args&&... args);   // construct_at 으로 제자리 생성
@@ -173,53 +159,26 @@ public:
     //   살아 있는 동안 새 버퍼에 "먼저" 생성한 뒤 옛 원소를 옮기고 옛 버퍼를
     //   마지막에 해제한다. 그래야 v.push_back(v[0]) 같은 자기참조 인자도 안전하다.
 
-    // TODO: begin() / end() — Deducing This, raw 포인터를 반환
-
-
-// // TODO: reserve(std::size_t new_capacity)
-//     //         새 메모리 allocate → 원소 제자리 이동 생성 → 옛 원소 destroy_n → deallocate
-//     void reserve(std::size_t new_capacity) {
-//         if (new_capacity <= capacity_)
-//             return;
-
-//         T* new_data = alloc_.allocate(new_capacity);
-//         for (std::size_t i = 0; i < size_; ++i)
-//         {
-//             std::construct_at(new_data + i, std::move(data_[i]));
-//             std::destroy_at(data_ + i); // 이동 후 기존 객체 파괴 필수
-//         }
-        
-//         if (data_)
-//             alloc_.deallocate(data_, capacity_);
-
-//         data_ = new_data;
-//         capacity_ = new_capacity;
-//     }
-
-
-
     template <typename... Args>
     requires std::constructible_from<T, Args...>
     T& emplace_back(Args&&... args) {
-        if (size_ == capacity_) {
+        if(size_ == capacity_) {
             reserve(capacity_ == 0 ? 1 : capacity_ * 2);
         }
         T* ptr = data_ + size_;
         std::construct_at(ptr, std::forward<Args>(args)...);
         ++size_;
         return *ptr;
-    }
-
-    void push_back(const T& value) { emplace_back(value); }
-    void push_back(T&& value) { emplace_back(std::move(value)); }
+    };
 
     // TODO: begin() / end() — Deducing This, raw 포인터를 반환
-    template <typename Self> auto begin(this Self& self) { return self.data_; }
-    template <typename Self> auto end(this Self& self) { return self.data_ + self.size_; }
+    auto begin() { return data_; }
+    auto end() { return data_ + size_; }
+
 
 
 private:
-    // alloc_ 는 가장 먼저 선언한다 (data_ 초기화보다 먼저 살아 있어야 함).
+    
 void swap(my_vector& other) {
     std::swap(data_, other.data_);
     std::swap(size_, other.size_);
@@ -227,9 +186,18 @@ void swap(my_vector& other) {
 }
 
 void resize(size_t new_capacity) {
-
+    T* temp = alloc_.allocate(new_capacity);
+    for (size_t i = 0; i < size_; ++i) {
+        std::construct_at(temp + i, std::move(data_[i]));
+    }
+    std::destroy_n(data_, size_);
+    if (data_)
+        alloc_.deallocate(data_, capacity_);
+    data_ = temp;
+    capacity_ = new_capacity;
 }
 
+// alloc_ 는 가장 먼저 선언한다 (data_ 초기화보다 먼저 살아 있어야 함).
     std::allocator<T> alloc_{};
     T *data_ = nullptr;
     std::size_t size_ = 0;
